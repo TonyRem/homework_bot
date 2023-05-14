@@ -26,11 +26,10 @@ HOMEWORK_VERDICTS = {
 
 
 def check_tokens():
-    required_tokens = ["PRACTICUM_TOKEN", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"]
-    for token in required_tokens:
-        if not os.getenv(token):
-            logging.critical("Отсутствует обязательная переменная окружения: '{token}'")
-            sys.exit("Программа принудительно остановлена.")
+    required_tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+    if not all(required_tokens):
+        logging.critical("Отсутствует обязательная переменная окружения: '{token}'")
+        sys.exit("Программа принудительно остановлена.")
 
 
 def send_message(bot, message):
@@ -38,7 +37,8 @@ def send_message(bot, message):
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logging.debug(f"Бот отправил сообщение: {message}")
     except Exception as e:
-        logging.error(f"Ошибка при отправке сообщения в Telegram: {e}")
+        # logging.error(f"Ошибка при отправке сообщения в Telegram: {e}")
+        raise Exception(f"Ошибка при отправке сообщения в Telegram: {e}")
 
 
 def get_api_answer(timestamp):
@@ -47,27 +47,30 @@ def get_api_answer(timestamp):
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         return response.json()
     except Exception as e:
-        logging.error(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
-        return None
+        # logging.error(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
+        raise Exception(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
 
 
 def check_response(response):
-    if "homeworks" not in response:
-        logging.error("Отсутствует ожидаемый ключ 'homeworks' в ответе API")
-        return None
-    return response["homeworks"]
+    try:
+        last_homework = response["homeworks"][0]
+    except KeyError:
+        # logging.error("Отсутствует ожидаемый ключ 'homeworks' в ответе API")
+        raise Exception("Отсутствует ожидаемый ключ 'homeworks' в ответе API")
+    return last_homework
 
 
 def parse_status(homework):
-    if "status" not in homework or "id" not in homework:
-        logging.error("Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API")
-        return None
-    status = homework["status"]
-    homework_name = homework["id"]
-    if status not in HOMEWORK_VERDICTS:
-        logging.error(f"Обнаружен неожиданный статус работы: {status}")
-        return None
-    verdict = HOMEWORK_VERDICTS[status]
+    try:
+        status = homework["status"]
+        homework_name = homework["homework_name"]
+        verdict = HOMEWORK_VERDICTS[status]
+    except KeyError:
+        # logging.error("Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API")
+        raise Exception("Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API")
+    except Exception as e:
+        # logging.error(f"Обнаружена ошибка при обработке статуса работы: {e}")
+        raise Exception(f"Обнаружена ошибка при обработке статуса работы: {e}")
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -76,27 +79,22 @@ def main():
     logging.basicConfig(
         level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s"
     )
+
     check_tokens()
+
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    timestamp = int(time.time())
+    timestamp = 0
+    last_response = None
 
     while True:
         try:
             api_answer = get_api_answer(timestamp)
-            if api_answer is None:
-                time.sleep(5)
-                continue
 
-            homeworks = check_response(api_answer)
-            if homeworks is None:
-                time.sleep(5)
-                continue
-
-            if homeworks:
-                for homework in homeworks:
-                    status_text = parse_status(homework)
-                    if status_text:
-                        send_message(bot, status_text)
+            if api_answer != last_response:
+                last_response = api_answer
+                last_homework = check_response(api_answer)
+                status_message = parse_status(last_homework)
+                send_message(bot, status_message)
             else:
                 logging.debug("Отсутствуют новые статусы работы")
 
