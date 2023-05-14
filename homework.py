@@ -28,7 +28,7 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """
-    Проверяет доступность переменных окружения, необходимых для работы
+    Проверяет доступность переменных окружения, необходимых для работы 
     программы. Если хотя бы одна переменная окружения отсутствует, прекращает
     выполнение программы.
     """
@@ -41,9 +41,7 @@ def check_tokens():
 
 
 def send_message(bot, message):
-    """
-    Отправляет сообщение в Telegram чат.
-    """
+    """Отправляет сообщение в Telegram чат."""
     logger = logging.getLogger()
 
     try:
@@ -54,9 +52,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(timestamp):
-    """
-    Делает запрос к API-сервису для получения ответа.
-    """
+    """Делает запрос к API-сервису для получения ответа."""
     params = {"from_date": timestamp}
 
     try:
@@ -73,9 +69,7 @@ def get_api_answer(timestamp):
 
 
 def check_response(response):
-    """
-    Проверяет и возвращает последнюю работу из ответа API.
-    """
+    """Проверяет и возвращает последнюю работу из ответа API."""
     try:
         homeworks = response["homeworks"]
         if not isinstance(homeworks, list):
@@ -95,9 +89,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """
-    Извлекает статус работы из информации о домашней работе.
-    """
+    """Извлекает статус работы из информации о домашней работе."""
     try:
         status = homework["status"]
         homework_name = homework["homework_name"]
