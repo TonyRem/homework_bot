@@ -27,11 +27,7 @@ HOMEWORK_VERDICTS = {
 
 
 def check_tokens():
-    """
-    Проверяет доступность переменных окружения, необходимых для работы
-    программы. Если хотя бы одна переменная окружения отсутствует, прекращает
-    выполнение программы.
-    """
+    """Проверяет переменные окружения, необходимые для работы программы."""
     required_tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
     if not all(required_tokens):
         logging.critical(
