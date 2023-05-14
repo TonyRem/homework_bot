@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import logging
+import logging.handlers
 import telegram
 import sys
 from dotenv import load_dotenv
@@ -26,85 +27,125 @@ HOMEWORK_VERDICTS = {
 
 
 def check_tokens():
+    """
+    Проверяет доступность переменных окружения, необходимых для работы
+    программы. Если хотя бы одна переменная окружения отсутствует, прекращает
+    выполнение программы.
+    """
     required_tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
     if not all(required_tokens):
-        logging.critical("Отсутствует обязательная переменная окружения: '{token}'")
+        logging.critical(
+            "Отсутствует обязательная переменная окружения: '{token}'"
+        )
         sys.exit("Программа принудительно остановлена.")
 
 
 def send_message(bot, message):
+    """
+    Отправляет сообщение в Telegram чат.
+    """
+    logger = logging.getLogger()
+
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        logging.debug(f"Бот отправил сообщение: {message}")
+        logger.debug(f"Бот отправил сообщение: {message}")
     except Exception as e:
-        # logging.error(f"Ошибка при отправке сообщения в Telegram: {e}")
-        raise Exception(f"Ошибка при отправке сообщения в Telegram: {e}")
+        logger.error(f"Ошибка при отправке сообщения в Telegram: {e}")
 
 
 def get_api_answer(timestamp):
+    """
+    Делает запрос к API-сервису для получения ответа.
+    """
     params = {"from_date": timestamp}
+
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        return response.json()
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(
+                f"Ошибка при запросе к эндпоинту {ENDPOINT}. "
+                f"Код ответа: {response.status_code}"
+            )
     except Exception as e:
-        # logging.error(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
         raise Exception(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
 
 
 def check_response(response):
+    """
+    Проверяет и возвращает последнюю работу из ответа API.
+    """
     try:
-        last_homework = response["homeworks"][0]
+        homeworks = response["homeworks"]
+        if not isinstance(homeworks, list):
+            raise TypeError(
+                "Данные о работах должны быть представлены в виде списка"
+            )
+        last_homework = homeworks[0]
     except KeyError:
-        # logging.error("Отсутствует ожидаемый ключ 'homeworks' в ответе API")
         raise Exception("Отсутствует ожидаемый ключ 'homeworks' в ответе API")
+    except IndexError:
+        raise Exception("Список работ пуст")
+    except TypeError:
+        raise TypeError(
+            "Данные о работах должны быть представлены в виде списка"
+        )
     return last_homework
 
 
 def parse_status(homework):
+    """
+    Извлекает статус работы из информации о домашней работе.
+    """
     try:
         status = homework["status"]
         homework_name = homework["homework_name"]
         verdict = HOMEWORK_VERDICTS[status]
     except KeyError:
-        # logging.error("Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API")
-        raise Exception("Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API")
+        raise Exception(
+            "Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API"
+        )
     except Exception as e:
-        # logging.error(f"Обнаружена ошибка при обработке статуса работы: {e}")
         raise Exception(f"Обнаружена ошибка при обработке статуса работы: {e}")
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
     """Основная логика работы бота."""
-    logging.basicConfig(
-        level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s"
-    )
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    log_format = "%(asctime)s [%(levelname)s] %(message)s"
+    formatter = logging.Formatter(log_format)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
 
     check_tokens()
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = 0
-    last_response = None
+    last_status_message = None
 
     while True:
         try:
             api_answer = get_api_answer(timestamp)
+            last_homework = check_response(api_answer)
+            status_message = parse_status(last_homework)
 
-            if api_answer != last_response:
-                last_response = api_answer
-                last_homework = check_response(api_answer)
-                status_message = parse_status(last_homework)
+            if status_message != last_status_message:
                 send_message(bot, status_message)
+                last_status_message = status_message
             else:
-                logging.debug("Отсутствуют новые статусы работы")
+                logger.debug("Отсутствуют новые статусы работы")
 
             time.sleep(RETRY_PERIOD)
 
-        except Exception as error:
-            message = f"Сбой в работе программы: {error}"
-            logging.error(message)
+        except Exception as e:
+            message = f"Сбой в работе программы: {e}"
+            logger.error(message)
             send_message(bot, message)
-            time.sleep(5)
+            time.sleep(RETRY_PERIOD)
 
 
 if __name__ == "__main__":
