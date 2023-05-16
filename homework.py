@@ -143,7 +143,7 @@ def main():
         except SendMessageError as e:
             message = str(e)
             logger.error(message)
-        
+
         except NetworkError as e:
             message = str(e)
             logger.error(message)
