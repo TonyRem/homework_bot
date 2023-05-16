@@ -2,12 +2,15 @@ import os
 import sys
 import time
 from http import HTTPStatus
+from urllib.error import HTTPError
 
 from dotenv import load_dotenv
 import logging
 import logging.handlers
 import requests
 import telegram
+
+from exceptions import SendMessageError, InvalidAPIResponse, NetworkError
 
 load_dotenv()
 
@@ -47,7 +50,9 @@ def send_message(bot, message):
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logger.debug(f"Бот отправил сообщение: {message}")
     except Exception as e:
-        logger.error(f"Ошибка при отправке сообщения в Telegram: {e}")
+        raise SendMessageError(
+            f"Ошибка при отправке сообщения в Telegram: {e}"
+        )
 
 
 def get_api_answer(timestamp):
@@ -56,33 +61,33 @@ def get_api_answer(timestamp):
 
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        if response.status_code == HTTPStatus.OK:
-            return response.json()
-        else:
-            error_message = (
-                f"Ошибка при запросе к эндпоинту {ENDPOINT}. "
-                f"Код ответа: {response.status_code}. "
-                f"Параметры запроса: {params}"
-            )
-            raise Exception(error_message)
-    except Exception as e:
-        raise Exception(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
+        response.raise_for_status()
+        if not response.status_code == HTTPStatus.OK:
+            raise HTTPError
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        raise NetworkError(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
+
+    except HTTPError:
+        raise InvalidAPIResponse(
+            f"Ошибка при запросе к эндпоинту {ENDPOINT}. "
+            f"Код ответа: {response.status_code}. "
+            f"Параметры запроса: {params}"
+        )
 
 
 def check_response(response):
     """Проверяет и возвращает последнюю работу из ответа API."""
-    if not isinstance(response["homeworks"], list):
-            raise TypeError(
-            "Данные о работах должны быть представлены в виде списка"
-        )
     try:
-        homeworks = response["homeworks"]
-        last_homework = homeworks[0]
+        return response["homeworks"][0]
+    except TypeError:
+        err_message = "Данные о работах должны быть представлены в виде списка"
     except KeyError:
-        raise Exception("Отсутствует ожидаемый ключ 'homeworks' в ответе API")
+        err_message = "Отсутствует ожидаемый ключ 'homeworks' в ответе API"
     except IndexError:
-        raise Exception("Список работ пуст")
-    return last_homework
+        err_message = "Список работ пуст"
+    raise InvalidAPIResponse(err_message)
 
 
 def parse_status(homework):
@@ -130,10 +135,25 @@ def main():
 
             time.sleep(RETRY_PERIOD)
 
+        except InvalidAPIResponse as e:
+            message = str(e)
+            logger.error(message)
+            send_message(bot, message)
+
+        except SendMessageError as e:
+            message = str(e)
+            logger.error(message)
+        
+        except NetworkError as e:
+            message = str(e)
+            logger.error(message)
+
         except Exception as e:
             message = f"Сбой в работе программы: {e}"
             logger.error(message)
             send_message(bot, message)
+
+        finally:
             time.sleep(RETRY_PERIOD)
 
 
