@@ -1,11 +1,13 @@
 import os
+import sys
 import time
-import requests
+from http import HTTPStatus
+
+from dotenv import load_dotenv
 import logging
 import logging.handlers
+import requests
 import telegram
-import sys
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -28,7 +30,7 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяет переменные окружения, необходимые для работы программы."""
-    required_tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+    required_tokens = (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
     if not all(required_tokens):
         logging.critical(
             "Отсутствует обязательная переменная окружения: '{token}'"
@@ -41,6 +43,7 @@ def send_message(bot, message):
     logger = logging.getLogger()
 
     try:
+        logger.debug(f"Бот готовится отправить сообщение: {message}")
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logger.debug(f"Бот отправил сообщение: {message}")
     except Exception as e:
@@ -53,34 +56,32 @@ def get_api_answer(timestamp):
 
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             return response.json()
         else:
-            raise Exception(
+            error_message = (
                 f"Ошибка при запросе к эндпоинту {ENDPOINT}. "
-                f"Код ответа: {response.status_code}"
+                f"Код ответа: {response.status_code}. "
+                f"Параметры запроса: {params}"
             )
+            raise Exception(error_message)
     except Exception as e:
         raise Exception(f"Сбой при запросе к эндпоинту {ENDPOINT}: {e}")
 
 
 def check_response(response):
     """Проверяет и возвращает последнюю работу из ответа API."""
+    if not isinstance(response["homeworks"], list):
+            raise TypeError(
+            "Данные о работах должны быть представлены в виде списка"
+        )
     try:
         homeworks = response["homeworks"]
-        if not isinstance(homeworks, list):
-            raise TypeError(
-                "Данные о работах должны быть представлены в виде списка"
-            )
         last_homework = homeworks[0]
     except KeyError:
         raise Exception("Отсутствует ожидаемый ключ 'homeworks' в ответе API")
     except IndexError:
         raise Exception("Список работ пуст")
-    except TypeError:
-        raise TypeError(
-            "Данные о работах должны быть представлены в виде списка"
-        )
     return last_homework
 
 
