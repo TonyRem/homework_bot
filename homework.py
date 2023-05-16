@@ -35,9 +35,7 @@ def check_tokens():
     """Проверяет переменные окружения, необходимые для работы программы."""
     required_tokens = (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
     if not all(required_tokens):
-        logging.critical(
-            "Отсутствует обязательная переменная окружения: '{token}'"
-        )
+        logging.critical("Отсутствует обязательная переменная окружения: '{token}'")
         sys.exit("Программа принудительно остановлена.")
 
 
@@ -50,9 +48,7 @@ def send_message(bot, message):
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logger.debug(f"Бот отправил сообщение: {message}")
     except Exception as e:
-        raise SendMessageError(
-            f"Ошибка при отправке сообщения в Telegram: {e}"
-        )
+        raise SendMessageError(f"Ошибка при отправке сообщения в Telegram: {e}")
 
 
 def get_api_answer(timestamp):
@@ -97,9 +93,7 @@ def parse_status(homework):
         homework_name = homework["homework_name"]
         verdict = HOMEWORK_VERDICTS[status]
     except KeyError:
-        raise Exception(
-            "Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API"
-        )
+        raise Exception("Отсутствуют ожидаемые ключи 'status' или 'id' в ответе API")
     except Exception as e:
         raise Exception(f"Обнаружена ошибка при обработке статуса работы: {e}")
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -132,8 +126,6 @@ def main():
                 last_status_message = status_message
             else:
                 logger.debug("Отсутствуют новые статусы работы")
-
-            time.sleep(RETRY_PERIOD)
 
         except InvalidAPIResponse as e:
             message = str(e)
